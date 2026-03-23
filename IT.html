@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoAttendance | Secure Scan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f4f8;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h1 { color: #2d5a27; margin-bottom: 5px; }
+        .subtitle { color: #666; margin-bottom: 20px; font-size: 0.9rem; }
+        #reader {
+            border: 5px solid #fff;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        #status-text {
+            font-weight: bold;
+            color: #333;
+        }
+        .reset-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #2d5a27;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>GeoAttendance</h1>
+        <p class="subtitle">IT Department - Proximity Verification</p>
+
+        <div id="reader"></div>
+
+        <div id="status-card" class="card">
+            <p id="status-text">Ready to Scan...</p>
+            <div id="location-data"></div>
+        </div>
+
+        <button onclick="location.reload()" class="reset-btn">Reset Scanner</button>
+    </div>
+
+    <script>
+        // 1. SET YOUR CLASSROOM CENTER (YOUR LOCATION)
+        const TARGET_LAT = 18.729350;
+        const TARGET_LON = 73.665344;
+        const RADIUS = 0.0005; // ~50 meters
+
+        const statusText = document.getElementById('status-text');
+        const locationData = document.getElementById('location-data');
+
+        // 2. QR SCAN SUCCESS CALLBACK
+        function onScanSuccess(decodedText) {
+            if (decodedText === "ROOM_302_IT") {
+                html5QrcodeScanner.clear(); // Stop camera
+                statusText.innerText = "QR Verified! Checking Geofence...";
+                statusText.style.color = "orange";
+                verifyLocation();
+            } else {
+                statusText.innerText = "Invalid QR Code!";
+                statusText.style.color = "red";
+            }
+        }
+
+        // 3. GEOFENCE LOGIC
+        function verifyLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLat = position.coords.latitude;
+                        const userLon = position.coords.longitude;
+
+                        const latDist = Math.abs(userLat - TARGET_LAT);
+                        const lonDist = Math.abs(userLon - TARGET_LON);
+
+                        if (latDist < RADIUS && lonDist < RADIUS) {
+                            // SUCCESS: inside classroom
+                            statusText.innerText = "✅ Attendance Marked Successfully!";
+                            statusText.style.color = "green";
+                            locationData.innerHTML = `
+                                <p>Verified at: ${userLat.toFixed(6)}, ${userLon.toFixed(6)}</p>
+                            `;
+                        } else {
+                            // OUTSIDE RANGE
+                            statusText.innerText = "❌ Verification Failed: Outside Room 302";
+                            statusText.style.color = "red";
+                            locationData.innerHTML = `
+                                <p>You are too far from the classroom.</p>
+                                <p>Required: ${TARGET_LAT.toFixed(6)}, ${TARGET_LON.toFixed(6)}</p>
+                            `;
+                        }
+                    },
+                    (error) => {
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                statusText.innerText = "Location Error: Please allow GPS permission.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                statusText.innerText = "Location Error: Position unavailable.";
+                                break;
+                            case error.TIMEOUT:
+                                statusText.innerText = "Location Error: Location request timed out.";
+                                break;
+                            default:
+                                statusText.innerText = "Location Error: Please enable GPS.";
+                                break;
+                        }
+                        statusText.style.color = "red";
+                    }
+                );
+            } else {
+                statusText.innerText = "Location Error: Your browser doesn't support geolocation.";
+                statusText.style.color = "red";
+            }
+        }
+
+        // 4. INITIALIZE QR SCANNER (declare scanner variable before use)
+        let html5QrcodeScanner;
+        function initScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().catch(() => {});
+            }
+
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader",
+                {
+                    fps: 10,
+                    qrbox: 250
+                },
+                /* verbose= */false
+            );
+
+            // Render scanner only after page is ready
+            html5QrcodeScanner.render(
+                onScanSuccess,
+                (errorMessage) => {
+                    statusText.innerText = "Scanner Error: " + errorMessage;
+                    statusText.style.color = "red";
+                }
+            );
+        }
+
+        // 5. LOAD ON PAGE READY
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", initScanner);
+        } else {
+            initScanner();
+        }
+    </script>
+</body>
+</html>
